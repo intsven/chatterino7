@@ -193,10 +193,30 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
         }
 
         auto id = parts.at(1);
-        if (!id.isEmpty())
+        if (id.isEmpty())
         {
-            gifs.push_back(TwitchGifOccurrence{id});
+            continue;
         }
+
+        // Extract original text from range (e.g. "0-29")
+        QString originalText;
+        if (!parts.isEmpty())
+        {
+            auto range = parts.at(0).split('-');
+            if (range.size() == 2)
+            {
+                auto from = range.at(0).toUInt();
+                auto to = range.at(1).toUInt();
+                if (to < static_cast<uint>(content.length()))
+                {
+                    originalText = content.mid(
+                        static_cast<int>(from),
+                        static_cast<int>(to - from + 1));
+                }
+            }
+        }
+
+        gifs.push_back(TwitchGifOccurrence{id, originalText});
     }
 
     return gifs;

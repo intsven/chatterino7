@@ -2330,7 +2330,8 @@ void MessageBuilder::addWords(
                 this->emplace<ScalingImageElement>(
                     set, MessageElementFlag::TwitchGif)
                     ->setLink(Link{Link::Url, link})
-                    ->setTooltip(u"Twitch GIF: " % id);
+                    ->setTooltip(currentTwitchGifIt->originalText %
+                                 u" (GIPHY ID: " % id % u")");
             }
             ++currentTwitchGifIt;
         }
