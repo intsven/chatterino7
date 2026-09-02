@@ -709,6 +709,11 @@ public:
 
     std::unique_ptr<MessageElement> clone() const override;
 
+    const ImageSet &images() const
+    {
+        return this->images_;
+    }
+
 private:
     ImageSet images_;
 };

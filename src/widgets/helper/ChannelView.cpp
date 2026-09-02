@@ -2030,10 +2030,15 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
     const auto *emoteElement = dynamic_cast<const EmoteElement *>(element);
     const auto *layeredEmoteElement =
         dynamic_cast<const LayeredEmoteElement *>(element);
+    const auto *gifElement =
+        dynamic_cast<const ScalingImageElement *>(element);
+    bool isTwitchGif =
+        gifElement && gifElement->getFlags().has(MessageElementFlag::TwitchGif);
     bool isNotEmote = emoteElement == nullptr && layeredEmoteElement == nullptr;
 
     if (element->getTooltip().isEmpty() ||
-        (isLinkValid && isNotEmote && !getSettings()->linkInfoTooltip))
+        (isLinkValid && isNotEmote && !isTwitchGif &&
+         !getSettings()->linkInfoTooltip))
     {
         this->tooltipWidget_->hide();
     }
@@ -2041,7 +2046,7 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
     {
         const auto *badgeElement = dynamic_cast<const BadgeElement *>(element);
 
-        if (badgeElement || emoteElement || layeredEmoteElement)
+        if (badgeElement || emoteElement || layeredEmoteElement || isTwitchGif)
         {
             auto showThumbnailSetting =
                 getSettings()->emotesTooltipPreview.getEnum();
@@ -2126,6 +2131,14 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
                     showThumbnail
                         ? badgeElement->getEmote()->images.getImage(3.0)
                         : nullptr,
+                    element->getTooltip(), getTooltipScale(scale)));
+            }
+            else if (isTwitchGif)
+            {
+                auto scale = getSettings()->emoteTooltipScale.getEnum();
+                this->tooltipWidget_->setOne(TooltipEntry::scaled(
+                    showThumbnail ? gifElement->images().getImage(3.0)
+                                  : nullptr,
                     element->getTooltip(), getTooltipScale(scale)));
             }
         }
