@@ -35,6 +35,7 @@ struct HelixVip;
 using HelixModerator = HelixVip;
 struct ChannelPointReward;
 struct TwitchEmoteOccurrence;
+struct TwitchGifOccurrence;
 
 namespace linkparser {
 struct Parsed;
@@ -311,6 +312,7 @@ private:
 
     void addWords(const QStringList &words,
                   const std::vector<TwitchEmoteOccurrence> &twitchEmotes,
+                  const std::vector<TwitchGifOccurrence> &twitchGifs,
                   TextState &state);
 
     void appendTwitchBadges(const QVariantMap &tags,

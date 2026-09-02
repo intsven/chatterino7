@@ -164,4 +164,42 @@ std::vector<TwitchEmoteOccurrence> parseTwitchEmotes(const QVariantMap &tags,
     return twitchEmotes;
 }
 
+std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
+                                                  const QString &content,
+                                                  int messageOffset)
+{
+    std::vector<TwitchGifOccurrence> gifs;
+
+    auto gifsTag = tags.find("gifs");
+    if (gifsTag == tags.end())
+    {
+        return gifs;
+    }
+
+    auto gifsString = gifsTag.value().toString();
+    if (gifsString.isEmpty())
+    {
+        return gifs;
+    }
+
+    // Format: <range>|<gifID>|<gifURL>,<range>|<gifID>|<gifURL>
+    auto gifEntries = gifsString.split(',', Qt::SkipEmptyParts);
+    for (const QString &entry : gifEntries)
+    {
+        auto parts = entry.split('|');
+        if (parts.size() < 2)
+        {
+            continue;
+        }
+
+        auto id = parts.at(1);
+        if (!id.isEmpty())
+        {
+            gifs.push_back(TwitchGifOccurrence{id});
+        }
+    }
+
+    return gifs;
+}
+
 }  // namespace chatterino

@@ -152,7 +152,12 @@ enum class MessageElementFlag : int64_t {
     // for the reply button element
     ReplyButton = (1LL << 33),
 
+    // (1LL << 34) is unused
+    // (1LL << 35) is unused
     // (1LL << 36) is occupied by BadgeSevenTV
+
+    // Twitch GIFs (inline images from GIPHY)
+    TwitchGif = (1LL << 34),
 
     Default = Timestamp | Badges | Username | BitsStatic | EmoteImage |
               BitsAmount | Text | AlwaysShow,

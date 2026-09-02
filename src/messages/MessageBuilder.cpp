@@ -1666,6 +1666,10 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     auto twitchEmotes =
         parseTwitchEmotes(tags, content, static_cast<int>(messageOffset));
 
+    // Twitch GIFs
+    auto twitchGifs =
+        parseTwitchGifs(tags, content, static_cast<int>(messageOffset));
+
     // This runs through all ignored phrases and runs its replacements on content
     processIgnorePhrases(*getSettings()->ignoredMessages.readOnly(), content,
                          twitchEmotes);
@@ -1682,7 +1686,7 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     // words
     QStringList splits = content.split(' ');
 
-    builder.addWords(splits, twitchEmotes, textState);
+    builder.addWords(splits, twitchEmotes, twitchGifs, textState);
 
     QString stylizedUsername =
         stylizeUsername(builder->loginName, builder.message());
@@ -2287,11 +2291,13 @@ Outcome MessageBuilder::tryAppendEmote(TwitchChannel *twitchChannel,
 
 void MessageBuilder::addWords(
     const QStringList &words,
-    const std::vector<TwitchEmoteOccurrence> &twitchEmotes, TextState &state)
+    const std::vector<TwitchEmoteOccurrence> &twitchEmotes,
+    const std::vector<TwitchGifOccurrence> &twitchGifs, TextState &state)
 {
     // cursor currently indicates what character index we're currently operating in the full list of words
     int cursor = 0;
     auto currentTwitchEmoteIt = twitchEmotes.begin();
+    auto currentTwitchGifIt = twitchGifs.begin();
 
     for (auto word : words)
     {
@@ -2299,6 +2305,34 @@ void MessageBuilder::addWords(
         {
             cursor++;
             continue;
+        }
+
+        // Check for Twitch GIFs at current position
+        if (currentTwitchGifIt != twitchGifs.end() &&
+            !currentTwitchGifIt->id.isEmpty())
+        {
+            if (getSettings()->showTwitchGifs)
+            {
+                auto id = currentTwitchGifIt->id;
+                QString link = u"https://i.giphy.com/" % id % u".webp";
+                ImageSet set{
+                    Image::fromUrl(
+                        Url{u"https://media4.giphy.com/media/" % id %
+                            u"/100.webp"},
+                        1.0, {100, 100}),
+                    Image::fromUrl(
+                        Url{u"https://media4.giphy.com/media/" % id %
+                            u"/200.webp"},
+                        0.5, {200, 200}),
+                };
+                this->emplace<LinebreakElement>(
+                    MessageElementFlag::TwitchGif);
+                this->emplace<ScalingImageElement>(
+                    set, MessageElementFlag::TwitchGif)
+                    ->setLink(Link{Link::Url, link})
+                    ->setTooltip(u"Twitch GIF: " % id);
+            }
+            ++currentTwitchGifIt;
         }
 
         while (doesWordContainATwitchEmote(cursor, word, twitchEmotes,

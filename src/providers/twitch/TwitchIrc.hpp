@@ -7,8 +7,15 @@
 #include <QVariantMap>
 
 #include <unordered_map>
+#include <variant>
 
 namespace chatterino {
+
+struct TwitchGifOccurrence {
+    QString id;
+
+    bool operator==(const TwitchGifOccurrence &rhs) const = default;
+};
 
 struct TwitchEmoteOccurrence {
     int start;
@@ -21,6 +28,14 @@ struct TwitchEmoteOccurrence {
         return std::tie(this->start, this->end, this->ptr, this->name) ==
                std::tie(other.start, other.end, other.ptr, other.name);
     }
+};
+
+struct TwitchSpecialOccurrence {
+    int start = 0;
+    int length = 0;
+    std::variant<TwitchEmoteOccurrence, TwitchGifOccurrence> data;
+
+    bool operator==(const TwitchSpecialOccurrence &other) const = default;
 };
 
 /// @brief Parses the `badge-info` tag of an IRC message
@@ -63,5 +78,15 @@ std::vector<Badge> parseBadgeTag(const QVariantMap &tags);
 std::vector<TwitchEmoteOccurrence> parseTwitchEmotes(const QVariantMap &tags,
                                                      const QString &content,
                                                      int messageOffset);
+
+/// @brief Parses Twitch GIF occurrences in an IRC message
+///
+/// @param tags The tags of the IRC message
+/// @param content The message text
+/// @param messageOffset The offset of content compared to original message
+/// @returns A list of GIF occurrences and their positions
+std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
+                                                  const QString &content,
+                                                  int messageOffset);
 
 }  // namespace chatterino

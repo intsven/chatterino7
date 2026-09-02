@@ -279,6 +279,7 @@ public:
     BoolSetting showBadgesSevenTV = {"/appearance/badges/seventv", true};
     BoolSetting animateSevenTVBadges = {"/appearance/badges/animateSeventv",
                                         true};
+    BoolSetting showTwitchGifs = {"/appearance/twitch/gifs", true};
     QSizeSetting lastPopupSize = {
         "/appearance/lastPopup/size",
         {300, 500},
