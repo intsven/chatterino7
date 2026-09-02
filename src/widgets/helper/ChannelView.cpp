@@ -2032,8 +2032,11 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
         dynamic_cast<const LayeredEmoteElement *>(element);
     const auto *gifElement =
         dynamic_cast<const ScalingImageElement *>(element);
+    const auto *twitchGifElement =
+        dynamic_cast<const TwitchGifElement *>(element);
     bool isTwitchGif =
-        gifElement && gifElement->getFlags().has(MessageElementFlag::TwitchGif);
+        (gifElement && gifElement->getFlags().has(MessageElementFlag::TwitchGif)) ||
+        twitchGifElement;
     bool isNotEmote = emoteElement == nullptr && layeredEmoteElement == nullptr;
 
     if (element->getTooltip().isEmpty() ||
@@ -2136,9 +2139,11 @@ void ChannelView::mouseMoveEvent(QMouseEvent *event)
             else if (isTwitchGif)
             {
                 auto scale = getSettings()->emoteTooltipScale.getEnum();
+                const auto &imgs = twitchGifElement
+                    ? twitchGifElement->images()
+                    : gifElement->images();
                 this->tooltipWidget_->setOne(TooltipEntry::scaled(
-                    showThumbnail ? gifElement->images().getImage(3.0)
-                                  : nullptr,
+                    showThumbnail ? imgs.getImage(3.0) : nullptr,
                     element->getTooltip(), getTooltipScale(scale)));
             }
         }

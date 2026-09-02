@@ -2327,7 +2327,7 @@ void MessageBuilder::addWords(
                 };
                 this->emplace<LinebreakElement>(
                     MessageElementFlag::TwitchGif);
-                this->emplace<ScalingImageElement>(
+                this->emplace<TwitchGifElement>(
                     set, MessageElementFlag::TwitchGif)
                     ->setLink(Link{Link::Url, link})
                     ->setTooltip(currentTwitchGifIt->originalText %

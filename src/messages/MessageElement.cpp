@@ -1486,6 +1486,65 @@ std::string_view ScalingImageElement::type() const
     return std::remove_pointer_t<decltype(this)>::TYPE;
 }
 
+// TWITCH GIF
+TwitchGifElement::TwitchGifElement(ImageSet images,
+                                   MessageElementFlags flags)
+    : MessageElement(flags)
+    , images_(std::move(images))
+{
+}
+
+void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
+                                      const MessageLayoutContext &ctx)
+{
+    if (ctx.flags.hasAny(this->getFlags()))
+    {
+        const auto &image =
+            this->images_.getImageOrLoaded(container.getImageScale());
+        if (image->isEmpty())
+        {
+            return;
+        }
+
+        auto imgSize = image->size();
+        qreal maxHeight = MAX_GIF_HEIGHT * container.getScale();
+        qreal scaleFactor = 1.0;
+
+        if (imgSize.height() > maxHeight)
+        {
+            scaleFactor = maxHeight / imgSize.height();
+        }
+
+        QSizeF constrainedSize(imgSize.width() * scaleFactor,
+                               imgSize.height() * scaleFactor);
+
+        container.addElement(
+            new ImageLayoutElement(*this, image, constrainedSize));
+    }
+}
+
+std::unique_ptr<MessageElement> TwitchGifElement::clone() const
+{
+    auto el =
+        std::make_unique<TwitchGifElement>(this->images_, this->getFlags());
+    el->cloneFrom(*this);
+    return el;
+}
+
+QJsonObject TwitchGifElement::toJson() const
+{
+    auto base = MessageElement::toJson();
+    base["type"_L1] = u"TwitchGifElement"_s;
+    base["image"_L1] = this->images_.getImage1()->url().string;
+
+    return base;
+}
+
+std::string_view TwitchGifElement::type() const
+{
+    return std::remove_pointer_t<decltype(this)>::TYPE;
+}
+
 ReplyCurveElement::ReplyCurveElement()
     : MessageElement(MessageElementFlag::RepliedMessage)
 {
