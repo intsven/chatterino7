@@ -2314,7 +2314,7 @@ void MessageBuilder::addWords(
             if (getSettings()->showTwitchGifs)
             {
                 auto id = currentTwitchGifIt->id;
-                QString link = u"https://i.giphy.com/" % id % u".webp";
+                QString link = u"https://giphy.com/gifs/" % id;
                 ImageSet set{
                     Image::fromUrl(
                         Url{u"https://media4.giphy.com/media/" % id %
