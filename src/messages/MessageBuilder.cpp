@@ -2307,14 +2307,15 @@ void MessageBuilder::addWords(
             continue;
         }
 
-        // Check for Twitch GIFs at current position
-        if (currentTwitchGifIt != twitchGifs.end() &&
-            !currentTwitchGifIt->id.isEmpty())
+        // Check for Twitch GIFs - render as inline image replacing bracketed text
+        if (currentTwitchGifIt != twitchGifs.end())
         {
-            if (getSettings()->showTwitchGifs)
+            if (getSettings()->showTwitchGifs &&
+                !currentTwitchGifIt->id.isEmpty())
             {
                 auto id = currentTwitchGifIt->id;
                 auto url = currentTwitchGifIt->url;
+                auto originalText = currentTwitchGifIt->originalText;
                 QString link = u"https://giphy.com/gifs/" % id;
 
                 // Use the URL from the gifs tag directly, or construct one
@@ -2326,31 +2327,20 @@ void MessageBuilder::addWords(
                     Image::fromUrl(Url{imgUrl}, 1.0, QSize(10000, 10000)),
                 };
 
+                // Skip the bracketed text in the word
+                if (!originalText.isEmpty() && word.startsWith(originalText))
+                {
+                    word = word.mid(originalText.length());
+                    cursor += originalText.length();
+                }
+
                 this->emplace<LinebreakElement>(
                     MessageElementFlag::TwitchGif);
                 this->emplace<ScalingImageElement>(
                     set, MessageElementFlag::TwitchGif)
                     ->setLink(Link{Link::Url, link})
-                    ->setTooltip(currentTwitchGifIt->originalText %
+                    ->setTooltip(originalText %
                                  u" (GIPHY ID: " % id % u")");
-            }
-            ++currentTwitchGifIt;
-        }
-
-        // Fallback: show bracketed GIF text as a link to GIPHY search
-        if (currentTwitchGifIt != twitchGifs.end() &&
-            currentTwitchGifIt->id.isEmpty() &&
-            !currentTwitchGifIt->originalText.isEmpty())
-        {
-            if (getSettings()->showTwitchGifs)
-            {
-                auto searchText = currentTwitchGifIt->originalText;
-                auto searchLink = u"https://giphy.com/search/" %
-                                  searchText.replace(' ', '-');
-                this->emplace<TextElement>(
-                    searchText, MessageElementFlag::TwitchGif,
-                    MessageColor::Link)
-                    ->setLink(Link{Link::Url, searchLink});
             }
             ++currentTwitchGifIt;
         }

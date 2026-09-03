@@ -723,7 +723,7 @@ class TwitchGifElement : public MessageElement
 public:
     static constexpr std::string_view TYPE = "twitch-gif";
 
-    static constexpr qreal MAX_GIF_HEIGHT = 150.0;
+    static constexpr qreal MAX_GIF_HEIGHT = 200.0;
 
     TwitchGifElement(ImageSet images, MessageElementFlags flags);
 
