@@ -2317,12 +2317,12 @@ void MessageBuilder::addWords(
                 QString link = u"https://giphy.com/gifs/" % id;
                 ImageSet set{
                     Image::fromUrl(
-                        Url{u"https://media4.giphy.com/media/" % id %
-                            u"/100.webp"},
+                        Url{u"https://media.giphy.com/media/" % id %
+                            u"/giphy.gif"},
                         1.0),
                     Image::fromUrl(
-                        Url{u"https://media4.giphy.com/media/" % id %
-                            u"/200.webp"},
+                        Url{u"https://media.giphy.com/media/" % id %
+                            u"/downsized.gif"},
                         0.5),
                 };
                 this->emplace<LinebreakElement>(
