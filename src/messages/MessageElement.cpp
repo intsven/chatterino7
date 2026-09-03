@@ -1507,7 +1507,18 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
         }
 
         auto imgSize = image->size();
-        qreal maxHeight = MAX_GIF_HEIGHT * container.getScale();
+
+        // Skip rendering if the image hasn't loaded yet.
+        // Before loading, size() returns the expectedSize (10000x10000).
+        // We detect this by checking if the size is suspiciously large.
+        if (imgSize.width() > 1000 && imgSize.height() > 1000)
+        {
+            return;
+        }
+
+        qreal maxHeight =
+            static_cast<qreal>(getSettings()->maxGifHeight) *
+            container.getScale();
         qreal scaleFactor = 1.0;
 
         if (imgSize.height() > maxHeight)
