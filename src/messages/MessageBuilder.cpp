@@ -2324,7 +2324,7 @@ void MessageBuilder::addWords(
                     : url;
 
                 ImageSet set{
-                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(10000, 10000)),
+                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(500, 500)),
                 };
 
                 // Skip the bracketed text in the word
