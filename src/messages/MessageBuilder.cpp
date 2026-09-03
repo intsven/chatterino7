@@ -2323,7 +2323,7 @@ void MessageBuilder::addWords(
                     : url;
 
                 ImageSet set{
-                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(320, 240)),
+                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(10000, 10000)),
                 };
 
                 this->emplace<LinebreakElement>(
