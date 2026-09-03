@@ -1670,6 +1670,16 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
     auto twitchGifs =
         parseTwitchGifs(tags, content, static_cast<int>(messageOffset));
 
+    if (!twitchGifs.empty())
+    {
+        for (const auto &gif : twitchGifs)
+        {
+            qCDebug(chatterinoTwitch)
+                << "GIF parsed - id:" << gif.id << "url:" << gif.url
+                << "text:" << gif.originalText;
+        }
+    }
+
     // This runs through all ignored phrases and runs its replacements on content
     processIgnorePhrases(*getSettings()->ignoredMessages.readOnly(), content,
                          twitchEmotes);
@@ -2324,7 +2334,7 @@ void MessageBuilder::addWords(
                     : url;
 
                 ImageSet set{
-                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(500, 500)),
+                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(10000, 10000)),
                 };
 
                 // Skip the bracketed text in the word

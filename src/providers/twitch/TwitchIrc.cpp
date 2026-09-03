@@ -178,6 +178,7 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
     if (gifsTag != tags.end())
     {
         auto gifsString = gifsTag.value().toString();
+        qCDebug(chatterinoTwitch) << "GIFs tag found:" << gifsString;
         if (!gifsString.isEmpty())
         {
             // Format: <range>|<gifID>|<gifURL>,<range>|<gifID>|<gifURL>
