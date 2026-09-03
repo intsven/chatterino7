@@ -7,7 +7,16 @@
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "util/IrcHelpers.hpp"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QUrlQuery>
+#include <QEventLoop>
+#include <QTimer>
 
 using namespace Qt::Literals;
 
@@ -168,9 +177,72 @@ std::vector<TwitchEmoteOccurrence> parseTwitchEmotes(const QVariantMap &tags,
     return twitchEmotes;
 }
 
+// GIPHY Search API key (public, read-only, from giphy.com)
+static constexpr const char *GIPHY_API_KEY = "b8iXa1LndnNFn38HoeJkvp0TRprEGLI8";
+static constexpr int GIPHY_SEARCH_TIMEOUT_MS = 3000;
+
+// Synchronous GIPHY search - extracts GIF ID from search result.
+// Returns empty string on failure.
+QString searchGiphyForGif(const QString &query)
+{
+    QUrl url(u"https://api.giphy.com/v1/gifs/search"_s);
+    QUrlQuery params;
+    params.addQueryItem(u"api_key"_s, QString::fromUtf8(GIPHY_API_KEY));
+    params.addQueryItem(u"q"_s, query);
+    params.addQueryItem(u"limit"_s, u"1"_s);
+    params.addQueryItem(u"rating"_s, u"pg-13"_s);
+    url.setQuery(params);
+
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, u"application/json"_s);
+
+    QNetworkAccessManager nam;
+    QNetworkReply *reply = nam.get(request);
+
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timeout.start(GIPHY_SEARCH_TIMEOUT_MS);
+    loop.exec();
+
+    if (reply->error() != QNetworkReply::NoError)
+    {
+        qCDebug(chatterinoTwitch)
+            << "GIPHY search failed:" << reply->errorString();
+        reply->deleteLater();
+        return {};
+    }
+
+    auto data = reply->readAll();
+    reply->deleteLater();
+
+    auto doc = QJsonDocument::fromJson(data);
+    if (!doc.isArray())
+    {
+        qCDebug(chatterinoTwitch) << "GIPHY search: unexpected response";
+        return {};
+    }
+
+    auto results = doc.array();
+    if (results.isEmpty())
+    {
+        qCDebug(chatterinoTwitch)
+            << "GIPHY search: no results for" << query;
+        return {};
+    }
+
+    auto firstResult = results[0].toObject();
+    auto id = firstResult.value("id").toString();
+    qCDebug(chatterinoTwitch) << "GIPHY search result - id:" << id
+                              << "for query:" << query;
+    return id;
+}
+
 std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
-                                                  const QString &content,
-                                                  int messageOffset)
+                                                   const QString &content,
+                                                   int messageOffset)
 {
     std::vector<TwitchGifOccurrence> gifs;
 
@@ -186,6 +258,8 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
             for (const QString &entry : gifEntries)
             {
                 auto parts = entry.split('|');
+                qCDebug(chatterinoTwitch)
+                    << "  GIF entry:" << entry << "parts:" << parts;
                 if (parts.size() < 2)
                 {
                     continue;
@@ -195,27 +269,43 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
                 auto url = parts.size() >= 3 ? parts.at(2) : QString();
                 if (id.isEmpty())
                 {
+                    qCDebug(chatterinoTwitch)
+                        << "  Skipping empty ID, full tag value:" << gifsString;
                     continue;
                 }
 
                 // Extract original text from range
                 QString originalText;
+                int startPos = -1;
+                int endPos = -1;
                 auto range = parts.at(0).split('-');
                 if (range.size() == 2)
                 {
                     auto from = range.at(0).toUInt();
                     auto to = range.at(1).toUInt();
+                    startPos = static_cast<int>(from);
+                    endPos = static_cast<int>(to);
                     if (to < static_cast<uint>(content.length()))
                     {
                         originalText = content.mid(
-                            static_cast<int>(from),
-                            static_cast<int>(to - from + 1));
+                            startPos, endPos - startPos + 1);
                     }
                 }
 
-                gifs.push_back(TwitchGifOccurrence{id, url, originalText});
+                qCDebug(chatterinoTwitch)
+                    << "  Parsed GIF - id:" << id << "url:" << url
+                    << "text:" << originalText << "range:" << startPos << "-"
+                    << endPos;
+                gifs.push_back(TwitchGifOccurrence{
+                    id, url, originalText, startPos, endPos});
             }
         }
+    }
+    else
+    {
+        // Log all available tags for debugging
+        qCDebug(chatterinoTwitch)
+            << "No GIFs tag. Available tags:" << tags.keys();
     }
 
     // Fallback: detect bracketed GIF pattern like [Title GIF by Source]
@@ -226,8 +316,46 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
         auto match = gifPattern.match(content);
         if (match.hasMatch())
         {
-            gifs.push_back(TwitchGifOccurrence{
-                {}, {}, match.captured(1)});
+            auto text = match.captured(1);
+            auto bracketStart = static_cast<int>(match.capturedStart());
+            auto bracketEnd = static_cast<int>(match.capturedEnd()) - 1;
+            qCDebug(chatterinoTwitch)
+                << "Fallback GIF pattern matched:" << text
+                << "at range:" << bracketStart << "-" << bracketEnd;
+
+            // Search GIPHY API using the GIF title
+            // Extract title: "Shock What GIF by ZenlessZoneZero" -> "Shock What"
+            QString searchQuery = text;
+            static QRegularExpression titlePattern(
+                QStringLiteral("^(.*?)\\s+GIF\\b"),
+                QRegularExpression::CaseInsensitiveOption);
+            auto titleMatch = titlePattern.match(text);
+            if (titleMatch.hasMatch())
+            {
+                searchQuery = titleMatch.captured(1).trimmed();
+            }
+
+            qCDebug(chatterinoTwitch)
+                << "Searching GIPHY for:" << searchQuery;
+            auto giphyId = searchGiphyForGif(searchQuery);
+
+            if (!giphyId.isEmpty())
+            {
+                qCDebug(chatterinoTwitch)
+                    << "GIPHY search succeeded, ID:" << giphyId;
+                gifs.push_back(TwitchGifOccurrence{
+                    giphyId,
+                    u"https://media.giphy.com/media/" % giphyId %
+                        u"/giphy.gif",
+                    text, bracketStart, bracketEnd});
+            }
+            else
+            {
+                qCDebug(chatterinoTwitch)
+                    << "GIPHY search failed, showing text only";
+                gifs.push_back(TwitchGifOccurrence{
+                    {}, {}, text, bracketStart, bracketEnd});
+            }
         }
     }
 

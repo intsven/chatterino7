@@ -2320,39 +2320,65 @@ void MessageBuilder::addWords(
         // Check for Twitch GIFs - render as inline image replacing bracketed text
         if (currentTwitchGifIt != twitchGifs.end())
         {
-            if (getSettings()->showTwitchGifs &&
-                !currentTwitchGifIt->id.isEmpty())
+            // Check if current cursor position falls within this GIF's range
+            if (currentTwitchGifIt->startPos >= 0 &&
+                cursor <= currentTwitchGifIt->startPos &&
+                currentTwitchGifIt->endPos >= currentTwitchGifIt->startPos)
             {
-                auto id = currentTwitchGifIt->id;
-                auto url = currentTwitchGifIt->url;
-                auto originalText = currentTwitchGifIt->originalText;
-                QString link = u"https://giphy.com/gifs/" % id;
+                // Calculate how many characters of the current word to skip
+                int gifStart = currentTwitchGifIt->startPos;
+                int gifEnd = currentTwitchGifIt->endPos + 1;  // exclusive
+                int wordEnd = cursor + word.length();
 
-                // Use the URL from the gifs tag directly, or construct one
-                QString imgUrl = url.isEmpty()
-                    ? (u"https://media4.giphy.com/media/" % id % u"/giphy.gif")
-                    : url;
-
-                ImageSet set{
-                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(10000, 10000)),
-                };
-
-                // Skip the bracketed text in the word
-                if (!originalText.isEmpty() && word.startsWith(originalText))
+                if (cursor <= gifStart && gifStart < wordEnd)
                 {
-                    word = word.mid(originalText.length());
-                    cursor += originalText.length();
-                }
+                    // The GIF starts in the middle of this word
+                    int skipTo = gifEnd - cursor;
+                    if (skipTo > word.length())
+                    {
+                        skipTo = word.length();
+                    }
 
-                this->emplace<LinebreakElement>(
-                    MessageElementFlag::TwitchGif);
-                this->emplace<ScalingImageElement>(
-                    set, MessageElementFlag::TwitchGif)
-                    ->setLink(Link{Link::Url, link})
-                    ->setTooltip(originalText %
-                                 u" (GIPHY ID: " % id % u")");
+                    auto originalText = currentTwitchGifIt->originalText;
+
+                    if (getSettings()->showTwitchGifs &&
+                        !currentTwitchGifIt->id.isEmpty())
+                    {
+                        auto id = currentTwitchGifIt->id;
+                        auto url = currentTwitchGifIt->url;
+                        QString link = u"https://giphy.com/gifs/" % id;
+
+                        // Use the URL from the gifs tag directly, or construct one
+                        QString imgUrl =
+                            url.isEmpty()
+                                ? (u"https://media4.giphy.com/media/" % id %
+                                   u"/giphy.gif")
+                                : url;
+
+                        ImageSet set{Image::fromUrl(
+                            Url{imgUrl}, 1.0, QSize(10000, 10000))};
+
+                        this->emplace<LinebreakElement>(
+                            MessageElementFlag::TwitchGif);
+                        this->emplace<ScalingImageElement>(
+                            set, MessageElementFlag::TwitchGif)
+                            ->setLink(Link{Link::Url, link})
+                            ->setTooltip(originalText %
+                                         u" (GIPHY ID: " % id % u")");
+                    }
+
+                    cursor += skipTo;
+                    word = word.mid(skipTo);
+
+                    ++currentTwitchGifIt;
+
+                    if (word.isEmpty())
+                    {
+                        cursor += 1;  // space
+                        break;
+                    }
+                }
             }
-            ++currentTwitchGifIt;
         }
 
         while (doesWordContainATwitchEmote(cursor, word, twitchEmotes,

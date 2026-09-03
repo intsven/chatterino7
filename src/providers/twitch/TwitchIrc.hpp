@@ -15,6 +15,8 @@ struct TwitchGifOccurrence {
     QString id;
     QString url;
     QString originalText;
+    int startPos = -1;  // position in content where the bracketed text starts
+    int endPos = -1;    // position where it ends (inclusive)
 
     bool operator==(const TwitchGifOccurrence &rhs) const = default;
 };
