@@ -13,6 +13,7 @@ namespace chatterino {
 
 struct TwitchGifOccurrence {
     QString id;
+    QString url;
     QString originalText;
 
     bool operator==(const TwitchGifOccurrence &rhs) const = default;

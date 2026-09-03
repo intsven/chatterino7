@@ -7,6 +7,10 @@
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "util/IrcHelpers.hpp"
 
+#include <QRegularExpression>
+
+using namespace Qt::Literals;
+
 namespace {
 
 using namespace chatterino;
@@ -171,52 +175,59 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
     std::vector<TwitchGifOccurrence> gifs;
 
     auto gifsTag = tags.find("gifs");
-    if (gifsTag == tags.end())
+    if (gifsTag != tags.end())
     {
-        return gifs;
-    }
-
-    auto gifsString = gifsTag.value().toString();
-    if (gifsString.isEmpty())
-    {
-        return gifs;
-    }
-
-    // Format: <range>|<gifID>|<gifURL>,<range>|<gifID>|<gifURL>
-    auto gifEntries = gifsString.split(',', Qt::SkipEmptyParts);
-    for (const QString &entry : gifEntries)
-    {
-        auto parts = entry.split('|');
-        if (parts.size() < 2)
+        auto gifsString = gifsTag.value().toString();
+        if (!gifsString.isEmpty())
         {
-            continue;
-        }
-
-        auto id = parts.at(1);
-        if (id.isEmpty())
-        {
-            continue;
-        }
-
-        // Extract original text from range (e.g. "0-29")
-        QString originalText;
-        if (!parts.isEmpty())
-        {
-            auto range = parts.at(0).split('-');
-            if (range.size() == 2)
+            // Format: <range>|<gifID>|<gifURL>,<range>|<gifID>|<gifURL>
+            auto gifEntries = gifsString.split(',', Qt::SkipEmptyParts);
+            for (const QString &entry : gifEntries)
             {
-                auto from = range.at(0).toUInt();
-                auto to = range.at(1).toUInt();
-                if (to < static_cast<uint>(content.length()))
+                auto parts = entry.split('|');
+                if (parts.size() < 2)
                 {
-                    originalText = content.mid(
-                        static_cast<int>(from),
-                        static_cast<int>(to - from + 1));
+                    continue;
                 }
+
+                auto id = parts.at(1);
+                auto url = parts.size() >= 3 ? parts.at(2) : QString();
+                if (id.isEmpty())
+                {
+                    continue;
+                }
+
+                // Extract original text from range
+                QString originalText;
+                auto range = parts.at(0).split('-');
+                if (range.size() == 2)
+                {
+                    auto from = range.at(0).toUInt();
+                    auto to = range.at(1).toUInt();
+                    if (to < static_cast<uint>(content.length()))
+                    {
+                        originalText = content.mid(
+                            static_cast<int>(from),
+                            static_cast<int>(to - from + 1));
+                    }
+                }
+
+                gifs.push_back(TwitchGifOccurrence{id, url, originalText});
             }
         }
+    }
 
-        gifs.push_back(TwitchGifOccurrence{id, originalText});
+    // Fallback: detect bracketed GIF pattern like [Title GIF by Source]
+    if (gifs.empty())
+    {
+        static QRegularExpression gifPattern(
+            u"\\[([^\\]]*?\\bGIF\\b[^\\]]*?)\\]"_s);
+        auto match = gifPattern.match(content);
+        if (match.hasMatch())
+        {
+            gifs.push_back(TwitchGifOccurrence{
+                {}, {}, match.captured(1)});
+        }
     }
 
     return gifs;

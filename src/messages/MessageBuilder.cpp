@@ -2314,24 +2314,63 @@ void MessageBuilder::addWords(
             if (getSettings()->showTwitchGifs)
             {
                 auto id = currentTwitchGifIt->id;
+                auto url = currentTwitchGifIt->url;
                 QString link = u"https://giphy.com/gifs/" % id;
-                ImageSet set{
-                    Image::fromUrl(
-                        Url{u"https://media.giphy.com/media/" % id %
-                            u"/giphy.gif"},
-                        1.0),
-                    Image::fromUrl(
-                        Url{u"https://media.giphy.com/media/" % id %
-                            u"/downsized.gif"},
-                        0.5),
-                };
-                this->emplace<LinebreakElement>(
-                    MessageElementFlag::TwitchGif);
-                this->emplace<TwitchGifElement>(
-                    set, MessageElementFlag::TwitchGif)
-                    ->setLink(Link{Link::Url, link})
-                    ->setTooltip(currentTwitchGifIt->originalText %
-                                 u" (GIPHY ID: " % id % u")");
+
+                // Use URL from tag if available, otherwise construct one
+                if (!url.isEmpty())
+                {
+                    ImageSet set{
+                        Image::fromUrl(Url{url}, 1.0),
+                        Image::fromUrl(Url{url}, 0.5),
+                    };
+                    this->emplace<LinebreakElement>(
+                        MessageElementFlag::TwitchGif);
+                    this->emplace<TwitchGifElement>(
+                        set, MessageElementFlag::TwitchGif)
+                        ->setLink(Link{Link::Url, link})
+                        ->setTooltip(currentTwitchGifIt->originalText %
+                                     u" (GIPHY ID: " % id % u")");
+                }
+                else
+                {
+                    // Construct URLs from ID using GIPHY media endpoints
+                    ImageSet set{
+                        Image::fromUrl(
+                            Url{u"https://media4.giphy.com/media/" % id %
+                                u"/giphy.gif"},
+                            1.0),
+                        Image::fromUrl(
+                            Url{u"https://media4.giphy.com/media/" % id %
+                                u"/200.gif"},
+                            0.5),
+                    };
+                    this->emplace<LinebreakElement>(
+                        MessageElementFlag::TwitchGif);
+                    this->emplace<TwitchGifElement>(
+                        set, MessageElementFlag::TwitchGif)
+                        ->setLink(Link{Link::Url, link})
+                        ->setTooltip(currentTwitchGifIt->originalText %
+                                     u" (GIPHY ID: " % id % u")");
+                }
+            }
+            ++currentTwitchGifIt;
+        }
+
+        // Fallback: show bracketed GIF text as a link to GIPHY search
+        if (currentTwitchGifIt != twitchGifs.end() &&
+            currentTwitchGifIt->id.isEmpty() &&
+            !currentTwitchGifIt->originalText.isEmpty())
+        {
+            if (getSettings()->showTwitchGifs)
+            {
+                auto searchText = currentTwitchGifIt->originalText;
+                auto searchLink = u"https://giphy.com/search/" %
+                                  searchText.replace(' ', '-');
+                this->emplace<TextElement>(
+                    searchText, MessageElementFlag::TwitchGif,
+                    MessageColor::Link)
+                    ->setLink(Link{Link::Url, searchLink});
             }
             ++currentTwitchGifIt;
         }
