@@ -2317,42 +2317,22 @@ void MessageBuilder::addWords(
                 auto url = currentTwitchGifIt->url;
                 QString link = u"https://giphy.com/gifs/" % id;
 
-                // Use URL from tag if available, otherwise construct one
-                if (!url.isEmpty())
-                {
-                    ImageSet set{
-                        Image::fromUrl(Url{url}, 1.0),
-                        Image::fromUrl(Url{url}, 0.5),
-                    };
-                    this->emplace<LinebreakElement>(
-                        MessageElementFlag::TwitchGif);
-                    this->emplace<TwitchGifElement>(
-                        set, MessageElementFlag::TwitchGif)
-                        ->setLink(Link{Link::Url, link})
-                        ->setTooltip(currentTwitchGifIt->originalText %
-                                     u" (GIPHY ID: " % id % u")");
-                }
-                else
-                {
-                    // Construct URLs from ID using GIPHY media endpoints
-                    ImageSet set{
-                        Image::fromUrl(
-                            Url{u"https://media4.giphy.com/media/" % id %
-                                u"/giphy.gif"},
-                            1.0),
-                        Image::fromUrl(
-                            Url{u"https://media4.giphy.com/media/" % id %
-                                u"/200.gif"},
-                            0.5),
-                    };
-                    this->emplace<LinebreakElement>(
-                        MessageElementFlag::TwitchGif);
-                    this->emplace<TwitchGifElement>(
-                        set, MessageElementFlag::TwitchGif)
-                        ->setLink(Link{Link::Url, link})
-                        ->setTooltip(currentTwitchGifIt->originalText %
-                                     u" (GIPHY ID: " % id % u")");
-                }
+                // Use the URL from the gifs tag directly, or construct one
+                QString imgUrl = url.isEmpty()
+                    ? (u"https://media4.giphy.com/media/" % id % u"/giphy.gif")
+                    : url;
+
+                ImageSet set{
+                    Image::fromUrl(Url{imgUrl}, 1.0, QSize(320, 240)),
+                };
+
+                this->emplace<LinebreakElement>(
+                    MessageElementFlag::TwitchGif);
+                this->emplace<ScalingImageElement>(
+                    set, MessageElementFlag::TwitchGif)
+                    ->setLink(Link{Link::Url, link})
+                    ->setTooltip(currentTwitchGifIt->originalText %
+                                 u" (GIPHY ID: " % id % u")");
             }
             ++currentTwitchGifIt;
         }
