@@ -2358,9 +2358,7 @@ void MessageBuilder::addWords(
                         ImageSet set{Image::fromUrl(
                             Url{imgUrl}, 1.0, QSize(10000, 10000))};
 
-                        this->emplace<LinebreakElement>(
-                            MessageElementFlag::TwitchGif);
-                        this->emplace<ScalingImageElement>(
+                        this->emplace<TwitchGifElement>(
                             set, MessageElementFlag::TwitchGif)
                             ->setLink(Link{Link::Url, link})
                             ->setTooltip(originalText %

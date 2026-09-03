@@ -1510,8 +1510,7 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
 
         // Skip rendering if the image hasn't loaded yet.
         // Before loading, size() returns the expectedSize (10000x10000).
-        // We detect this by checking if the size is suspiciously large.
-        if (imgSize.width() > 1000 && imgSize.height() > 1000)
+        if (imgSize.width() > 1000 || imgSize.height() > 1000)
         {
             return;
         }
@@ -1529,6 +1528,7 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
         QSizeF constrainedSize(imgSize.width() * scaleFactor,
                                imgSize.height() * scaleFactor);
 
+        container.breakLine();
         container.addElement(
             new ImageLayoutElement(*this, image, constrainedSize));
     }
