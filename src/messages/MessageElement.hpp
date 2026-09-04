@@ -743,7 +743,7 @@ public:
 
 private:
     ImageSet images_;
-    QString fallbackText_;
+    std::unique_ptr<TextElement> fallbackElement_;
 };
 
 class ReplyCurveElement : public MessageElement

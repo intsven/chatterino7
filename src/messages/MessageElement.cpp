@@ -1491,8 +1491,13 @@ TwitchGifElement::TwitchGifElement(ImageSet images, QString fallbackText,
                                    MessageElementFlags flags)
     : MessageElement(flags)
     , images_(std::move(images))
-    , fallbackText_(std::move(fallbackText))
 {
+    if (!fallbackText.isEmpty())
+    {
+        auto text = u'[' % fallbackText % u']';
+        this->fallbackElement_ = std::make_unique<TextElement>(
+            text, MessageElementFlag::Text, MessageColor::Link);
+    }
 }
 
 void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
@@ -1526,20 +1531,20 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
         }
 
         // Image failed to load — show fallback text in square brackets
-        if (!this->fallbackText_.isEmpty())
+        if (this->fallbackElement_)
         {
-            auto text = u'[' % this->fallbackText_ % u']';
-            TextElement(text, MessageElementFlag::Text, MessageColor::Link)
-                .addToContainer(container, ctx);
+            this->fallbackElement_->addToContainer(container, ctx);
         }
     }
 }
 
 std::unique_ptr<MessageElement> TwitchGifElement::clone() const
 {
-    auto el = std::make_unique<TwitchGifElement>(this->images_,
-                                                 this->fallbackText_,
-                                                 this->getFlags());
+    auto el = std::make_unique<TwitchGifElement>(
+        this->images_,
+        this->fallbackElement_ ? this->fallbackElement_->words().first()
+                               : QString(),
+        this->getFlags());
     el->cloneFrom(*this);
     return el;
 }
