@@ -355,9 +355,7 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
             else
             {
                 qCDebug(chatterinoTwitch)
-                    << "GIPHY search failed, showing text only";
-                gifs.push_back(TwitchGifOccurrence{
-                    {}, {}, text, bracketStart, bracketEnd});
+                    << "GIPHY search failed, bracketed text stays as-is";
             }
         }
     }

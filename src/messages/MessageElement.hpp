@@ -725,7 +725,8 @@ public:
 
     static constexpr qreal MAX_GIF_HEIGHT = 200.0;
 
-    TwitchGifElement(ImageSet images, MessageElementFlags flags);
+    TwitchGifElement(ImageSet images, QString fallbackText,
+                     MessageElementFlags flags);
 
     void addToContainer(MessageLayoutContainer &container,
                         const MessageLayoutContext &ctx) override;
@@ -742,6 +743,7 @@ public:
 
 private:
     ImageSet images_;
+    QString fallbackText_;
 };
 
 class ReplyCurveElement : public MessageElement

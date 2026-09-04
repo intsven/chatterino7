@@ -1487,10 +1487,11 @@ std::string_view ScalingImageElement::type() const
 }
 
 // TWITCH GIF
-TwitchGifElement::TwitchGifElement(ImageSet images,
+TwitchGifElement::TwitchGifElement(ImageSet images, QString fallbackText,
                                    MessageElementFlags flags)
     : MessageElement(flags)
     , images_(std::move(images))
+    , fallbackText_(std::move(fallbackText))
 {
 }
 
@@ -1501,35 +1502,44 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
     {
         const auto &image =
             this->images_.getImageOrLoaded(container.getImageScale());
-        if (image->isEmpty())
+
+        if (!image->isEmpty())
         {
+            auto imgSize = image->size();
+            qreal maxHeight =
+                static_cast<qreal>(getSettings()->maxGifHeight) *
+                container.getScale();
+            qreal scaleFactor = 1.0;
+
+            if (imgSize.height() > maxHeight)
+            {
+                scaleFactor = maxHeight / imgSize.height();
+            }
+
+            QSizeF constrainedSize(imgSize.width() * scaleFactor,
+                                   imgSize.height() * scaleFactor);
+
+            container.breakLine();
+            container.addElement(
+                new ImageLayoutElement(*this, image, constrainedSize));
             return;
         }
 
-        auto imgSize = image->size();
-        qreal maxHeight =
-            static_cast<qreal>(getSettings()->maxGifHeight) *
-            container.getScale();
-        qreal scaleFactor = 1.0;
-
-        if (imgSize.height() > maxHeight)
+        // Image failed to load — show fallback text in square brackets
+        if (!this->fallbackText_.isEmpty())
         {
-            scaleFactor = maxHeight / imgSize.height();
+            auto text = u'[' % this->fallbackText_ % u']';
+            TextElement(text, MessageElementFlag::Text, MessageColor::Link)
+                .addToContainer(container, ctx);
         }
-
-        QSizeF constrainedSize(imgSize.width() * scaleFactor,
-                               imgSize.height() * scaleFactor);
-
-        container.breakLine();
-        container.addElement(
-            new ImageLayoutElement(*this, image, constrainedSize));
     }
 }
 
 std::unique_ptr<MessageElement> TwitchGifElement::clone() const
 {
-    auto el =
-        std::make_unique<TwitchGifElement>(this->images_, this->getFlags());
+    auto el = std::make_unique<TwitchGifElement>(this->images_,
+                                                 this->fallbackText_,
+                                                 this->getFlags());
     el->cloneFrom(*this);
     return el;
 }

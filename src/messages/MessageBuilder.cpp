@@ -2359,7 +2359,7 @@ void MessageBuilder::addWords(
                             Url{imgUrl}, 1.0, QSize(10000, 10000))};
 
                         this->emplace<TwitchGifElement>(
-                            set, MessageElementFlag::TwitchGif)
+                            set, originalText, MessageElementFlag::TwitchGif)
                             ->setLink(Link{Link::Url, link})
                             ->setTooltip(originalText %
                                          u" (GIPHY ID: " % id % u")");
