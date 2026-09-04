@@ -1495,8 +1495,12 @@ TwitchGifElement::TwitchGifElement(ImageSet images, QString fallbackText,
     if (!fallbackText.isEmpty())
     {
         auto text = u'[' % fallbackText % u']';
+        auto query = fallbackText.replace('+', "%2B").replace(' ', '+');
+        auto searchUrl =
+            u"https://www.google.com/search?q=" % query;
         this->fallbackElement_ = std::make_unique<TextElement>(
             text, MessageElementFlag::Text, MessageColor::Link);
+        this->fallbackElement_->setLink(Link{Link::Url, searchUrl});
     }
 }
 
