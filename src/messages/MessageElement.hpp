@@ -726,7 +726,7 @@ public:
     static constexpr qreal MAX_GIF_HEIGHT = 200.0;
 
     TwitchGifElement(ImageSet images, QString fallbackText,
-                     MessageElementFlags flags);
+                     QString giphyPageUrl, MessageElementFlags flags);
 
     void addToContainer(MessageLayoutContainer &container,
                         const MessageLayoutContext &ctx) override;
@@ -743,6 +743,8 @@ public:
 
 private:
     ImageSet images_;
+    QString giphyPageUrl_;
+    QString fallbackText_;
     std::unique_ptr<TextElement> fallbackElement_;
 };
 

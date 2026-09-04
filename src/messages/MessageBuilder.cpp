@@ -2345,22 +2345,29 @@ void MessageBuilder::addWords(
                         !currentTwitchGifIt->id.isEmpty())
                     {
                         auto id = currentTwitchGifIt->id;
-                        auto url = currentTwitchGifIt->url;
-                        QString link = u"https://giphy.com/gifs/" % id;
+                        auto tagUrl = currentTwitchGifIt->url;
+                        QString giphyPageUrl =
+                            u"https://giphy.com/gifs/" % id;
 
-                        // Use the URL from the gifs tag directly, or construct one
-                        QString imgUrl =
-                            url.isEmpty()
-                                ? (u"https://media4.giphy.com/media/" % id %
-                                   u"/giphy.gif")
-                                : url;
+                        // Three URLs to try in order:
+                        // 1. i.giphy.com (clean, constructed from ID)
+                        // 2. tag_url (from IRC tag, with query params)
+                        // 3. media.giphy.com (bare fallback)
+                        auto primaryUrl =
+                            u"https://i.giphy.com/" % id % u".webp";
+                        auto fallbackUrl =
+                            u"https://media.giphy.com/media/" % id %
+                            u"/giphy.gif";
 
-                        ImageSet set{Image::fromUrl(
-                            Url{imgUrl}, 1.0, QSize(10000, 10000))};
+                        ImageSet set(Url{primaryUrl},
+                                     tagUrl.isEmpty() ? Url{}
+                                                      : Url{tagUrl},
+                                     Url{fallbackUrl});
 
                         this->emplace<TwitchGifElement>(
-                            set, originalText, MessageElementFlag::TwitchGif)
-                            ->setLink(Link{Link::Url, link})
+                            set, originalText, giphyPageUrl,
+                            MessageElementFlag::TwitchGif)
+                            ->setLink(Link{Link::Url, giphyPageUrl})
                             ->setTooltip(originalText %
                                          u" (GIPHY ID: " % id % u")");
                     }

@@ -1488,19 +1488,19 @@ std::string_view ScalingImageElement::type() const
 
 // TWITCH GIF
 TwitchGifElement::TwitchGifElement(ImageSet images, QString fallbackText,
+                                   QString giphyPageUrl,
                                    MessageElementFlags flags)
     : MessageElement(flags)
     , images_(std::move(images))
+    , giphyPageUrl_(std::move(giphyPageUrl))
+    , fallbackText_(std::move(fallbackText))
 {
-    if (!fallbackText.isEmpty())
+    if (!this->fallbackText_.isEmpty() && !this->giphyPageUrl_.isEmpty())
     {
-        QString text = u'[' % fallbackText % u']';
-        auto query = fallbackText.replace(' ', "%20");
-        auto searchUrl =
-            u"https://www.google.com/search?q=" % query;
+        QString text = u'[' % this->fallbackText_ % u']';
         this->fallbackElement_ = std::make_unique<TextElement>(
             text, MessageElementFlag::Text, MessageColor::Link);
-        this->fallbackElement_->setLink(Link{Link::Url, searchUrl});
+        this->fallbackElement_->setLink(Link{Link::Url, this->giphyPageUrl_});
     }
 }
 
@@ -1545,9 +1545,7 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
 std::unique_ptr<MessageElement> TwitchGifElement::clone() const
 {
     auto el = std::make_unique<TwitchGifElement>(
-        this->images_,
-        this->fallbackElement_ ? this->fallbackElement_->words().first()
-                               : QString(),
+        this->images_, this->fallbackText_, this->giphyPageUrl_,
         this->getFlags());
     el->cloneFrom(*this);
     return el;

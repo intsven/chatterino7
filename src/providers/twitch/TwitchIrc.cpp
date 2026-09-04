@@ -266,17 +266,13 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
                 }
 
                 auto id = parts.at(1);
-                auto tagUrl = parts.size() >= 3 ? parts.at(2) : QString();
+                auto url = parts.size() >= 3 ? parts.at(2) : QString();
                 if (id.isEmpty())
                 {
                     qCDebug(chatterinoTwitch)
                         << "  Skipping empty ID, full tag value:" << gifsString;
                     continue;
                 }
-
-                // Prefer constructed i.giphy.com URL (clean, no query params)
-                auto url = u"https://i.giphy.com/" % id %
-                           u".webp";
 
                 // Extract original text from range
                 QString originalText;
@@ -348,9 +344,7 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
                 qCDebug(chatterinoTwitch)
                     << "GIPHY search succeeded, ID:" << giphyId;
                 gifs.push_back(TwitchGifOccurrence{
-                    giphyId,
-                    u"https://i.giphy.com/" % giphyId % u".webp",
-                    text, bracketStart, bracketEnd});
+                    giphyId, {}, text, bracketStart, bracketEnd});
             }
             else
             {
