@@ -1509,12 +1509,35 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
 {
     if (ctx.flags.hasAny(this->getFlags()))
     {
-        const auto &image =
-            this->images_.getImageOrLoaded(container.getImageScale());
-
-        if (!image->isEmpty())
+        // Try each image in the set — use the first non-empty one
+        const ImagePtr *bestImage = nullptr;
+        int idx = 0;
+        for (auto *imgPtr :
+             {&this->images_.getImage1(), &this->images_.getImage2(),
+              &this->images_.getImage3()})
         {
-            auto imgSize = image->size();
+            const auto &img = *imgPtr;
+            if (img)
+            {
+                qDebug() << "TwitchGif: image" << idx << "url:" << img->url().string
+                         << "empty:" << img->isEmpty() << "loaded:" << img->loaded();
+            }
+            if (img && !img->isEmpty())
+            {
+                bestImage = imgPtr;
+                break;
+            }
+            // Trigger loading if not started yet
+            if (img && !img->loaded())
+            {
+                img->load();
+            }
+            ++idx;
+        }
+
+        if (bestImage)
+        {
+            auto imgSize = (*bestImage)->size();
             qreal maxHeight =
                 static_cast<qreal>(getSettings()->maxGifHeight) *
                 container.getScale();
@@ -1530,11 +1553,13 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
 
             container.breakLine();
             container.addElement(
-                new ImageLayoutElement(*this, image, constrainedSize));
+                new ImageLayoutElement(*this, *bestImage, constrainedSize));
             return;
         }
 
-        // Image failed to load — show fallback text in square brackets
+        qDebug() << "TwitchGif: all images empty, showing fallback";
+
+        // All images failed to load — show fallback text
         if (this->fallbackElement_)
         {
             this->fallbackElement_->addToContainer(container, ctx);
