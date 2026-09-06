@@ -93,6 +93,7 @@ struct MessageLayoutContext {
     int width = 1;
     float scale = 1;
     float imageScale = 1;
+    bool isActiveTab = false;
 };
 
 }  // namespace chatterino

@@ -10,6 +10,7 @@
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "singletons/Settings.hpp"
 #include "util/DebugCount.hpp"
+#include "util/GifDebugLog.hpp"
 
 #include <QDebug>
 #include <QGraphicsDropShadowEffect>

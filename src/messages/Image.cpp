@@ -2,6 +2,7 @@
 
 #include "Application.hpp"
 #include "common/Common.hpp"
+#include "common/Literals.hpp"
 #include "common/network/NetworkRequest.hpp"
 #include "common/network/NetworkResult.hpp"
 #include "common/QLogging.hpp"
@@ -11,6 +12,7 @@
 #include "singletons/helper/GifTimer.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/DebugCount.hpp"
+#include "util/GifDebugLog.hpp"
 #include "util/PostToThread.hpp"
 
 #include <boost/functional/hash.hpp>
@@ -21,12 +23,21 @@
 #include <QNetworkRequest>
 #include <QTimer>
 
+#include <QSemaphore>
+
 #include <atomic>
 
 // Duration between each check of every Image instance
 const auto IMAGE_POOL_CLEANUP_INTERVAL = std::chrono::minutes(1);
 // Duration since last usage of Image pixmap before expiration of frames
+
+// GIF load queue: limit concurrent giphy.com fetches to prevent Qt's
+// connection pool from being exhausted (Qt default: 6 per host).
+// Non-giphy loads (emotes, badges, etc.) are not throttled.
+static QSemaphore s_giphyLoadSlots(3);
 const auto IMAGE_POOL_IMAGE_LIFETIME = std::chrono::minutes(10);
+
+using namespace chatterino::literals;
 
 namespace chatterino::detail {
 
@@ -203,11 +214,10 @@ QList<Frame> readFrames(QImageReader &reader, const Url &url)
         auto pixmap = QPixmap::fromImageReader(&reader);
         if (!pixmap.isNull())
         {
-            // It seems that browsers have special logic for fast animations.
-            // This implements Chrome and Firefox's behavior which uses
-            // a duration of 100 ms for any frames that specify a duration of <= 10 ms.
-            // See http://webkit.org/b/36082 for more information.
-            // https://github.com/SevenTV/chatterino7/issues/46#issuecomment-1010595231
+            gifLog(QStringLiteral("[readFrames] Frame %1 decoded: %2x%3")
+                       .arg(index)
+                       .arg(pixmap.width())
+                       .arg(pixmap.height()));
             int duration = reader.nextImageDelay();
             if (duration <= 10)
             {
@@ -218,6 +228,13 @@ QList<Frame> readFrames(QImageReader &reader, const Url &url)
                 .image = std::move(pixmap),
                 .duration = duration,
             });
+        }
+        else
+        {
+            gifLog(QStringLiteral("[readFrames] Frame %1 is NULL for %2, error=%3")
+                       .arg(index)
+                       .arg(url.string)
+                       .arg(reader.errorString()));
         }
     }
 
@@ -238,9 +255,13 @@ void assignFrames(std::weak_ptr<Image> weak, QList<Frame> parsed)
         auto shared = weak.lock();
         if (!shared)
         {
+            gifLog(QStringLiteral("[assignFrames] Image expired before frames assigned"));
             return;
         }
         shared->frames_ = std::make_unique<detail::Frames>(std::move(parsed));
+        gifLog(QStringLiteral("[assignFrames] Frames assigned to %1, frames_empty=%2")
+                   .arg(shared->url().string)
+                   .arg(shared->frames_->empty()));
 
         // Avoid too many layouts in one event-loop iteration
         //
@@ -267,6 +288,28 @@ void assignFrames(std::weak_ptr<Image> weak, QList<Frame> parsed)
     };
 
     postToGuiThread(cb);
+}
+
+void notifyImageFailed()
+{
+    // Trigger re-layout so the next image in the ImageSet can be tried.
+    // Uses the same batching as assignFrames to avoid too many layouts.
+    static bool isPushQueued;
+    if (!isPushQueued)
+    {
+        isPushQueued = true;
+        QMetaObject::invokeMethod(
+            qApp,
+            [] {
+                isPushQueued = false;
+                auto *app = tryGetApp();
+                if (app != nullptr)
+                {
+                    app->getWindows()->forceLayoutChannelViews();
+                }
+            },
+            Qt::QueuedConnection);
+    }
 }
 
 }  // namespace chatterino::detail
@@ -422,13 +465,16 @@ std::optional<QPixmap> Image::pixmapOrLoad() const
     assertInGuiThread();
 
     // Mark the image as just used.
-    // Any time this Image is painted, this method is invoked.
-    // See src/messages/layouts/MessageLayoutElement.cpp ImageLayoutElement::paint, for example.
     this->lastUsed_ = std::chrono::steady_clock::now();
 
     this->load();
 
-    return this->frames_->current();
+    auto result = this->frames_->current();
+    if (!result && !this->empty_)
+    {
+        // Image not yet loaded and not failed — will be painted blank this frame
+    }
+    return result;
 }
 
 void Image::load() const
@@ -454,6 +500,16 @@ qreal Image::scale() const
 bool Image::isEmpty() const
 {
     return this->empty_;
+}
+
+bool Image::shouldLoad() const
+{
+    return this->shouldLoad_;
+}
+
+bool Image::hasFrames() const
+{
+    return !this->frames_->empty();
 }
 
 bool Image::animated() const
@@ -520,14 +576,41 @@ QSizeF Image::size() const
 void Image::actuallyLoad()
 {
     auto weak = weakOf(this);
+    bool isGiphy = this->url().string.contains("giphy.com");
+
+    // For giphy URLs, enforce a load queue to prevent Qt's connection pool
+    // from being exhausted (Qt defaults to 6 per host).
+    if (isGiphy && !s_giphyLoadSlots.tryAcquire())
+    {
+        qCDebug(chatterinoImage)
+            << "[GIF] Queue full, deferring:" << this->url().string;
+        // Retry after a short delay. The image stays in "loading" state
+        // (shouldLoad_=false, no frames) so addToContainer shows the title.
+        QTimer::singleShot(300, [weak]() {
+            if (auto img = weak.lock())
+            {
+                img->actuallyLoad();
+            }
+        });
+        return;
+    }
+
+    gifLog(QStringLiteral("[actuallyLoad] Starting fetch: %1").arg(this->url().string));
     NetworkRequest(this->url().string)
         .concurrent()
         .cache()
-        .timeout(60000)  // 60 second timeout for large images (like animated GIFs)
-        .onSuccess([weak](auto result) {
+        .timeout(15000)
+        .onSuccess([weak, isGiphy](auto result) {
+            if (isGiphy)
+            {
+                s_giphyLoadSlots.release();
+            }
+
             auto shared = weak.lock();
             if (!shared)
             {
+                qCDebug(chatterinoImage)
+                    << "[GIF] SUCCESS but Image expired";
                 return;
             }
 
@@ -540,15 +623,21 @@ void Image::actuallyLoad()
             if (!reader.canRead())
             {
                 qCDebug(chatterinoImage)
-                    << "Error: image cant be read " << shared->url().string;
+                    << "[GIF] canRead=FALSE url=" << shared->url().string
+                    << "error=" << reader.errorString()
+                    << "dataLen=" << result.getData().size();
                 shared->empty_ = true;
+                detail::notifyImageFailed();
                 return;
             }
 
             const auto size = reader.size();
             if (size.isEmpty())
             {
+                qCDebug(chatterinoImage)
+                    << "[GIF] size isEmpty url=" << shared->url().string;
                 shared->empty_ = true;
+                detail::notifyImageFailed();
                 return;
             }
 
@@ -556,9 +645,10 @@ void Image::actuallyLoad()
             if (reader.imageCount() <= 0)
             {
                 qCDebug(chatterinoImage)
-                    << "Error: image has less than 1 frame "
-                    << shared->url().string << ": " << reader.errorString();
+                    << "[GIF] imageCount <= 0 url=" << shared->url().string
+                    << "error=" << reader.errorString();
                 shared->empty_ = true;
+                detail::notifyImageFailed();
                 return;
             }
 
@@ -567,17 +657,33 @@ void Image::actuallyLoad()
                     double(reader.imageCount()) * 4.0 >
                 double(Image::maxBytesRam))
             {
-                qCDebug(chatterinoImage) << "image too large in RAM";
+                qCDebug(chatterinoImage)
+                    << "[GIF] image too large in RAM url=" << shared->url().string;
 
                 shared->empty_ = true;
+                detail::notifyImageFailed();
                 return;
             }
 
+            qCDebug(chatterinoImage)
+                << "[GIF] Decoding OK:" << shared->url().string
+                << size.width() << "x" << size.height()
+                << "frames=" << reader.imageCount();
+
             auto parsed = detail::readFrames(reader, shared->url());
+
+            gifLog(QStringLiteral("[actuallyLoad] readFrames returned %1 frames for %2")
+                       .arg(parsed.size())
+                       .arg(shared->url().string));
 
             assignFrames(shared, parsed);
         })
-        .onError([weak](auto result) {
+        .onError([weak, isGiphy](auto result) {
+            if (isGiphy)
+            {
+                s_giphyLoadSlots.release();
+            }
+
             auto shared = weak.lock();
             if (!shared)
             {
@@ -585,11 +691,27 @@ void Image::actuallyLoad()
             }
 
             qCDebug(chatterinoImage)
-                << "Failed to load image" << shared->url().string
-                << "status:" << result.status().value_or(-1);
+                << "[GIF] NETWORK ERROR url=" << shared->url().string
+                << "status=" << result.status().value_or(-1);
+
+            // Retry i.giphy.com once before giving up — these URLs are
+            // generally reliable but may fail transiently due to connection
+            // pool exhaustion or rate limiting.
+            if (!shared->retried_ &&
+                shared->url().string.startsWith("https://i.giphy.com/"))
+            {
+                shared->retried_ = true;
+                qCDebug(chatterinoImage)
+                    << "[GIF] Retrying:" << shared->url().string;
+                shared->actuallyLoad();
+                return true;
+            }
 
             // Mark as empty so it shows as text instead of blank
             shared->empty_ = true;
+
+            // Trigger re-layout so the next image in the ImageSet can be tried
+            detail::notifyImageFailed();
 
             return true;
         })

@@ -96,6 +96,8 @@ public:
     void load() const;
     qreal scale() const;
     bool isEmpty() const;
+    bool shouldLoad() const;
+    bool hasFrames() const;
     int width() const;
     int height() const;
     QSizeF size() const;
@@ -124,6 +126,7 @@ private:
     std::atomic_bool empty_{false};
 
     bool shouldLoad_{false};
+    bool retried_{false};
 
     mutable std::chrono::time_point<std::chrono::steady_clock> lastUsed_;
 

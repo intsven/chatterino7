@@ -15,6 +15,7 @@
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "util/DebugCount.hpp"
+#include "util/GifDebugLog.hpp"
 #include "util/Variant.hpp"
 
 #include <QJsonArray>
@@ -1495,11 +1496,20 @@ TwitchGifElement::TwitchGifElement(ImageSet images, QString fallbackText,
     , giphyPageUrl_(std::move(giphyPageUrl))
     , fallbackText_(std::move(fallbackText))
 {
+    gifLog(QStringLiteral("[TwitchGifElement] Created: img1=%2 img2=%3 img3=%4 giphyPage=%5 "
+           "fallback=%6")
+               .arg(this->images_.getImage1()->url().string,
+                    this->images_.getImage2()->url().string,
+                    this->images_.getImage3()->url().string,
+                    this->giphyPageUrl_,
+                    this->fallbackText_));
+
     if (!this->fallbackText_.isEmpty() && !this->giphyPageUrl_.isEmpty())
     {
         QString text = u'[' % this->fallbackText_ % u']';
         this->fallbackElement_ = std::make_unique<TextElement>(
-            text, MessageElementFlag::Text, MessageColor::Link);
+            text, MessageElementFlag::Text,
+            MessageColor(QColor(0, 255, 0)));  // neon green
         this->fallbackElement_->setLink(Link{Link::Url, this->giphyPageUrl_});
     }
 }
@@ -1509,9 +1519,9 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
 {
     if (ctx.flags.hasAny(this->getFlags()))
     {
-        // Try each image in the set — use the first non-empty one
         const ImagePtr *bestImage = nullptr;
         int idx = 0;
+        bool showedFallback = false;
         for (auto *imgPtr :
              {&this->images_.getImage1(), &this->images_.getImage2(),
               &this->images_.getImage3()})
@@ -1519,25 +1529,82 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
             const auto &img = *imgPtr;
             if (img)
             {
-                qDebug() << "TwitchGif: image" << idx << "url:" << img->url().string
-                         << "empty:" << img->isEmpty() << "loaded:" << img->loaded();
+                gifLog(QStringLiteral("[addToContainer] img%1 url=%2 empty=%3 shouldLoad=%4 "
+                       "loaded=%5 frames=%6 activeTab=%7")
+                           .arg(idx)
+                           .arg(img->url().string)
+                           .arg(img->isEmpty())
+                           .arg(img->shouldLoad())
+                           .arg(img->loaded())
+                           .arg(img->hasFrames())
+                           .arg(ctx.isActiveTab));
+                if (!img->isEmpty())
+                {
+                    if (!bestImage)
+                    {
+                        bestImage = imgPtr;
+                        // Only load if this is the active tab — skip loading
+                        // for background tabs to avoid network congestion.
+                        // When the tab becomes active, forceLayoutChannelViews()
+                        // re-runs addToContainer and load() is called then.
+                        if (ctx.isActiveTab)
+                        {
+                            img->load();
+                        }
+                    }
+                }
             }
-            if (img && !img->isEmpty())
+            else
             {
-                bestImage = imgPtr;
-                break;
-            }
-            // Trigger loading if not started yet
-            if (img && !img->loaded())
-            {
-                img->load();
+                gifLog(QStringLiteral("[addToContainer] img%1 is NULL").arg(idx));
             }
             ++idx;
         }
 
         if (bestImage)
         {
+            // Show the image only if it has finished loading.
+            // While loading (or if not yet triggered), show the fallback text
+            // so the user sees the GIF title instead of a blank space.
+            if ((*bestImage)->loaded())
+            {
+                auto imgSize = (*bestImage)->size();
+                qreal maxHeight =
+                    static_cast<qreal>(getSettings()->maxGifHeight) *
+                    container.getScale();
+                qreal scaleFactor = 1.0;
+
+                if (imgSize.height() > maxHeight)
+                {
+                    scaleFactor = maxHeight / imgSize.height();
+                }
+
+                QSizeF constrainedSize(imgSize.width() * scaleFactor,
+                                       imgSize.height() * scaleFactor);
+
+                gifLog(QStringLiteral("[addToContainer] BEST img url=%1 size=%2x%3 "
+                       "constrained=%4x%5 scale=%6")
+                           .arg((*bestImage)->url().string)
+                           .arg(imgSize.width())
+                           .arg(imgSize.height())
+                           .arg(constrainedSize.width())
+                           .arg(constrainedSize.height())
+                           .arg(scaleFactor));
+
+                container.breakLine();
+                container.addElement(
+                    new ImageLayoutElement(*this, *bestImage, constrainedSize));
+                return;
+            }
+
+            // Image exists but not loaded yet — reserve space and show title.
+            // Use the expected size so layout doesn't jump when the image loads.
             auto imgSize = (*bestImage)->size();
+            if (imgSize.isEmpty() || imgSize.width() > 4000 ||
+                imgSize.height() > 4000)
+            {
+                imgSize = QSize(480, 270);  // sensible default for unloaded GIFs
+            }
             qreal maxHeight =
                 static_cast<qreal>(getSettings()->maxGifHeight) *
                 container.getScale();
@@ -1551,15 +1618,27 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
             QSizeF constrainedSize(imgSize.width() * scaleFactor,
                                    imgSize.height() * scaleFactor);
 
+            gifLog(QStringLiteral("[addToContainer] LOADING img url=%1, showing title: %2")
+                       .arg((*bestImage)->url().string)
+                       .arg(this->fallbackText_));
+
             container.breakLine();
+
+            // Reserve the image space with a blank placeholder, then overlay
+            // the fallback title text below it so the user sees what's loading
             container.addElement(
                 new ImageLayoutElement(*this, *bestImage, constrainedSize));
+            if (this->fallbackElement_)
+            {
+                this->fallbackElement_->addToContainer(container, ctx);
+            }
             return;
         }
 
-        qDebug() << "TwitchGif: all images empty, showing fallback";
-
         // All images failed to load — show fallback text
+        showedFallback = true;
+        gifLog(QStringLiteral("[addToContainer] ALL images empty, showing fallback: %1")
+                   .arg(this->fallbackText_));
         if (this->fallbackElement_)
         {
             this->fallbackElement_->addToContainer(container, ctx);

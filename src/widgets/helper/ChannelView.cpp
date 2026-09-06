@@ -39,11 +39,13 @@
 #include "widgets/dialogs/ReplyThreadPopup.hpp"
 #include "widgets/dialogs/SettingsDialog.hpp"
 #include "widgets/dialogs/UserInfoPopup.hpp"
+#include "widgets/helper/NotebookTab.hpp"
 #include "widgets/helper/ScrollbarHighlight.hpp"
 #include "widgets/helper/SearchPopup.hpp"
 #include "widgets/Notebook.hpp"
 #include "widgets/Scrollbar.hpp"
 #include "widgets/splits/Split.hpp"
+#include "widgets/splits/SplitContainer.hpp"
 #include "widgets/splits/SplitInput.hpp"
 #include "widgets/TooltipWidget.hpp"
 #include "widgets/Window.hpp"
@@ -700,6 +702,22 @@ void ChannelView::layoutVisibleMessages(
     const auto flags = this->getFlags();
     auto redrawRequired = false;
 
+    // Check if this ChannelView is in the currently active/selected tab
+    bool isActiveTab = false;
+    if (this->split_)
+    {
+        auto *container = dynamic_cast<SplitContainer *>(
+            this->split_->parentWidget());
+        if (container)
+        {
+            auto *tab = container->getTab();
+            if (tab)
+            {
+                isActiveTab = tab->isSelected();
+            }
+        }
+    }
+
     if (messages.size() > start)
     {
         auto y = -(messages[start]->getHeight() *
@@ -717,6 +735,7 @@ void ChannelView::layoutVisibleMessages(
                     .scale = this->scale(),
                     .imageScale = this->scale() *
                                   static_cast<float>(this->devicePixelRatio()),
+                    .isActiveTab = isActiveTab,
                 },
                 this->bufferInvalidationQueued_);
 

@@ -44,6 +44,7 @@
 #include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/FormatTime.hpp"
+#include "util/GifDebugLog.hpp"
 #include "util/Helpers.hpp"
 #include "util/IrcHelpers.hpp"
 #include "util/QStringHash.hpp"
@@ -2349,9 +2350,9 @@ void MessageBuilder::addWords(
                         QString giphyPageUrl =
                             u"https://giphy.com/gifs/" % id;
 
-                        // Three URLs to try in order:
-                        // 1. i.giphy.com (clean, constructed from ID)
-                        // 2. tag_url (from IRC tag, with query params)
+                        // Try order:
+                        // 1. i.giphy.com/{id}.webp (clean, no query params)
+                        // 2. tag_url from Twitch IRC (if present)
                         // 3. media.giphy.com (bare fallback)
                         auto primaryUrl =
                             u"https://i.giphy.com/" % id % u".webp";
@@ -2359,10 +2360,21 @@ void MessageBuilder::addWords(
                             u"https://media.giphy.com/media/" % id %
                             u"/giphy.gif";
 
-                        ImageSet set(Url{primaryUrl},
-                                     tagUrl.isEmpty() ? Url{}
-                                                      : Url{tagUrl},
-                                     Url{fallbackUrl});
+                        ImageSet set(
+                            Image::fromUrl(Url{primaryUrl}, 1.0,
+                                           QSize(10000, 10000)),
+                            !tagUrl.isEmpty()
+                                ? Image::fromUrl(Url{tagUrl}, 1.0,
+                                                 QSize(10000, 10000))
+                                : Image::fromUrl(Url{fallbackUrl}, 1.0,
+                                                 QSize(10000, 10000)),
+                            Image::fromUrl(Url{fallbackUrl}, 1.0,
+                                           QSize(10000, 10000)));
+
+                        gifLog(QStringLiteral("[addWords] Created GIF element: id=%1 "
+                               "primary=%2 tag=%3 fallback=%4 text=%5")
+                                   .arg(id, primaryUrl, tagUrl, fallbackUrl,
+                                        originalText));
 
                         this->emplace<TwitchGifElement>(
                             set, originalText, giphyPageUrl,
