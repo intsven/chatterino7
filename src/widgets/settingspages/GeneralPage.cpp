@@ -608,6 +608,14 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             return fuzzyToFloat(args.value, 1.f);
         });
 
+    SettingWidget::intInput(
+        "Max GIF height (pixels)", s.maxGifHeight,
+        {.min = 50, .max = 800, .singleStep = 10, .suffix = "px"})
+        ->setTooltip(
+            "Maximum display height for inline Twitch GIFs. "
+            "Width scales proportionally.")
+        ->addTo(layout);
+
     SettingWidget::checkbox("Remove spaces between emotes",
                             s.removeSpacesBetweenEmotes)
         ->setTooltip("When enabled, adjacent emotes will no longer have an "
