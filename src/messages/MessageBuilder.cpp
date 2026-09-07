@@ -2392,7 +2392,7 @@ void MessageBuilder::addWords(
                     if (word.isEmpty())
                     {
                         cursor += 1;  // space
-                        break;
+                        continue;
                     }
                 }
             }
