@@ -608,6 +608,10 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             return fuzzyToFloat(args.value, 1.f);
         });
 
+    SettingWidget::checkbox("Show Twitch GIFs", s.showTwitchGifs)
+        ->setTooltip("Show inline GIF images from the Twitch GIF keyboard.")
+        ->addTo(layout);
+
     SettingWidget::intInput(
         "Max GIF height (pixels)", s.maxGifHeight,
         {.min = 50, .max = 800, .singleStep = 10, .suffix = "px"})

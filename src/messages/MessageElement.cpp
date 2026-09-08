@@ -1572,11 +1572,16 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
                 qreal maxHeight =
                     static_cast<qreal>(getSettings()->maxGifHeight) *
                     container.getScale();
+                qreal maxWidth = maxHeight * 2.0;
                 qreal scaleFactor = 1.0;
 
                 if (imgSize.height() > maxHeight)
                 {
                     scaleFactor = maxHeight / imgSize.height();
+                }
+                if (imgSize.width() * scaleFactor > maxWidth)
+                {
+                    scaleFactor = maxWidth / imgSize.width();
                 }
 
                 QSizeF constrainedSize(imgSize.width() * scaleFactor,
@@ -1608,11 +1613,16 @@ void TwitchGifElement::addToContainer(MessageLayoutContainer &container,
             qreal maxHeight =
                 static_cast<qreal>(getSettings()->maxGifHeight) *
                 container.getScale();
+            qreal maxWidth = maxHeight * 2.0;
             qreal scaleFactor = 1.0;
 
             if (imgSize.height() > maxHeight)
             {
                 scaleFactor = maxHeight / imgSize.height();
+            }
+            if (imgSize.width() * scaleFactor > maxWidth)
+            {
+                scaleFactor = maxWidth / imgSize.width();
             }
 
             QSizeF constrainedSize(imgSize.width() * scaleFactor,

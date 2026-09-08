@@ -43,6 +43,16 @@ TooltipEntry TooltipEntry::scaled(ImagePtr image, QString text, float scale)
     {
         auto imgWidth = entry.image->width() / entry.image->scale();
         auto imgHeight = entry.image->height() / entry.image->scale();
+
+        // Cap unloaded image sizes to avoid huge tooltips.
+        // When an image hasn't loaded yet, width()/height() return the
+        // expectedSize which may be very large (e.g. 10000 for GIFs).
+        if (imgWidth > 4000 || imgHeight > 4000)
+        {
+            imgWidth = 480;
+            imgHeight = 270;
+        }
+
         entry.customWidth = static_cast<int>(imgWidth * scale);
         entry.customHeight = static_cast<int>(imgHeight * scale);
     }

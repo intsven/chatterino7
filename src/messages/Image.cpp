@@ -622,6 +622,11 @@ void Image::actuallyLoad()
 
             if (!reader.canRead())
             {
+                gifLog(QStringLiteral("[actuallyLoad] canRead=FALSE url=%1 "
+                       "error=%2 dataLen=%3")
+                           .arg(shared->url().string,
+                                reader.errorString())
+                           .arg(result.getData().size()));
                 qCDebug(chatterinoImage)
                     << "[GIF] canRead=FALSE url=" << shared->url().string
                     << "error=" << reader.errorString()
@@ -634,6 +639,8 @@ void Image::actuallyLoad()
             const auto size = reader.size();
             if (size.isEmpty())
             {
+                gifLog(QStringLiteral("[actuallyLoad] size isEmpty url=%1")
+                           .arg(shared->url().string));
                 qCDebug(chatterinoImage)
                     << "[GIF] size isEmpty url=" << shared->url().string;
                 shared->empty_ = true;
@@ -644,6 +651,10 @@ void Image::actuallyLoad()
             // returns 1 for non-animated formats
             if (reader.imageCount() <= 0)
             {
+                gifLog(QStringLiteral("[actuallyLoad] imageCount<=0 url=%1 "
+                       "error=%2")
+                           .arg(shared->url().string,
+                                reader.errorString()));
                 qCDebug(chatterinoImage)
                     << "[GIF] imageCount <= 0 url=" << shared->url().string
                     << "error=" << reader.errorString();
@@ -657,6 +668,12 @@ void Image::actuallyLoad()
                     double(reader.imageCount()) * 4.0 >
                 double(Image::maxBytesRam))
             {
+                gifLog(QStringLiteral("[actuallyLoad] image too large url=%1 "
+                       "%2x%3 frames=%4")
+                           .arg(shared->url().string)
+                           .arg(size.width())
+                           .arg(size.height())
+                           .arg(reader.imageCount()));
                 qCDebug(chatterinoImage)
                     << "[GIF] image too large in RAM url=" << shared->url().string;
 
@@ -690,20 +707,31 @@ void Image::actuallyLoad()
                 return false;
             }
 
+            auto status = result.status().value_or(-1);
+            gifLog(QStringLiteral("[actuallyLoad] NETWORK ERROR url=%1 status=%2")
+                       .arg(shared->url().string)
+                       .arg(status));
+
             qCDebug(chatterinoImage)
                 << "[GIF] NETWORK ERROR url=" << shared->url().string
-                << "status=" << result.status().value_or(-1);
+                << "status=" << status;
 
-            // Retry i.giphy.com once before giving up — these URLs are
-            // generally reliable but may fail transiently due to connection
-            // pool exhaustion or rate limiting.
-            if (!shared->retried_ &&
-                shared->url().string.startsWith("https://i.giphy.com/"))
+            // Retry giphy URLs once after a short delay — network errors
+            // during startup are often caused by connection pool exhaustion
+            // when many images load simultaneously.
+            if (!shared->retried_ && isGiphy)
             {
                 shared->retried_ = true;
+                gifLog(QStringLiteral("[actuallyLoad] Retrying in 1s: %1")
+                           .arg(shared->url().string));
                 qCDebug(chatterinoImage)
-                    << "[GIF] Retrying:" << shared->url().string;
-                shared->actuallyLoad();
+                    << "[GIF] Retrying in 1s:" << shared->url().string;
+                QTimer::singleShot(1000, [weak]() {
+                    if (auto img = weak.lock())
+                    {
+                        img->actuallyLoad();
+                    }
+                });
                 return true;
             }
 

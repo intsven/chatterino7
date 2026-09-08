@@ -2305,17 +2305,55 @@ void MessageBuilder::addWords(
     const std::vector<TwitchEmoteOccurrence> &twitchEmotes,
     const std::vector<TwitchGifOccurrence> &twitchGifs, TextState &state)
 {
+    gifLog(QStringLiteral("[addWords] called: words=%1 emotes=%2 gifs=%3")
+               .arg(words.size())
+               .arg(twitchEmotes.size())
+               .arg(twitchGifs.size()));
+
     // cursor currently indicates what character index we're currently operating in the full list of words
     int cursor = 0;
     auto currentTwitchEmoteIt = twitchEmotes.begin();
     auto currentTwitchGifIt = twitchGifs.begin();
 
-    for (auto word : words)
+    // Track the exclusive end of the last rendered GIF to skip words within it.
+    // cursor advances naturally per word; this just flags "skip while cursor < end".
+    int gifSkipEnd = -1;
+
+    for (int wi = 0; wi < words.size(); ++wi)
     {
+        auto word = words[wi];
+
         if (word.isEmpty())
         {
             cursor++;
             continue;
+        }
+
+        // Skip words that fall entirely within an already-rendered GIF range.
+        // cursor tracks the real character position; gifSkipEnd is exclusive.
+        if (gifSkipEnd >= 0 && cursor + (int)word.length() <= gifSkipEnd)
+        {
+            // Entire word (+ its trailing space) is inside the GIF range
+            cursor += word.length() + 1;
+            continue;
+        }
+        if (gifSkipEnd >= 0 && cursor < gifSkipEnd)
+        {
+            // Word straddles the GIF range boundary — trim the portion inside
+            int skipChars = gifSkipEnd - cursor;
+            word = word.mid(skipChars);
+            cursor = gifSkipEnd;
+            gifSkipEnd = -1;
+            if (word.isEmpty())
+            {
+                cursor++;  // space
+                continue;
+            }
+        }
+        else if (gifSkipEnd >= 0)
+        {
+            // Past the GIF range
+            gifSkipEnd = -1;
         }
 
         // Check for Twitch GIFs - render as inline image replacing bracketed text
@@ -2326,20 +2364,12 @@ void MessageBuilder::addWords(
                 cursor <= currentTwitchGifIt->startPos &&
                 currentTwitchGifIt->endPos >= currentTwitchGifIt->startPos)
             {
-                // Calculate how many characters of the current word to skip
                 int gifStart = currentTwitchGifIt->startPos;
                 int gifEnd = currentTwitchGifIt->endPos + 1;  // exclusive
                 int wordEnd = cursor + word.length();
 
                 if (cursor <= gifStart && gifStart < wordEnd)
                 {
-                    // The GIF starts in the middle of this word
-                    int skipTo = gifEnd - cursor;
-                    if (skipTo > word.length())
-                    {
-                        skipTo = word.length();
-                    }
-
                     auto originalText = currentTwitchGifIt->originalText;
 
                     if (getSettings()->showTwitchGifs &&
@@ -2372,9 +2402,10 @@ void MessageBuilder::addWords(
                                            QSize(10000, 10000)));
 
                         gifLog(QStringLiteral("[addWords] Created GIF element: id=%1 "
-                               "primary=%2 tag=%3 fallback=%4 text=%5")
+                               "primary=%2 tag=%3 fallback=%4 text=%5 range=%6-%7")
                                    .arg(id, primaryUrl, tagUrl, fallbackUrl,
-                                        originalText));
+                                        originalText)
+                                   .arg(gifStart).arg(gifEnd - 1));
 
                         this->emplace<TwitchGifElement>(
                             set, originalText, giphyPageUrl,
@@ -2384,16 +2415,15 @@ void MessageBuilder::addWords(
                                          u" (GIPHY ID: " % id % u")");
                     }
 
-                    cursor += skipTo;
-                    word = word.mid(skipTo);
-
+                    // Advance cursor past the current word and set skip range
+                    // for subsequent words that fall within this GIF range.
+                    gifSkipEnd = gifEnd;
                     ++currentTwitchGifIt;
 
-                    if (word.isEmpty())
-                    {
-                        cursor += 1;  // space
-                        continue;
-                    }
+                    // Advance cursor past this word + space so the skip
+                    // logic at the top of the next iteration handles the rest.
+                    cursor += word.length() + 1;
+                    continue;
                 }
             }
         }

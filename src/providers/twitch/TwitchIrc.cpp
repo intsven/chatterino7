@@ -5,6 +5,7 @@
 #include "common/QLogging.hpp"
 #include "controllers/emotes/EmoteController.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
+#include "util/GifDebugLog.hpp"
 #include "util/IrcHelpers.hpp"
 
 #include <QJsonArray>
@@ -250,7 +251,8 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
     if (gifsTag != tags.end())
     {
         auto gifsString = gifsTag.value().toString();
-        qCDebug(chatterinoTwitch) << "GIFs tag found:" << gifsString;
+        gifLog(QStringLiteral("[parseTwitchGifs] GIFs tag found: %1 content='%2'")
+                   .arg(gifsString, content.left(80)));
         if (!gifsString.isEmpty())
         {
             // Format: <range>|<gifID>|<gifURL>,<range>|<gifID>|<gifURL>
@@ -258,8 +260,9 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
             for (const QString &entry : gifEntries)
             {
                 auto parts = entry.split('|');
-                qCDebug(chatterinoTwitch)
-                    << "  GIF entry:" << entry << "parts:" << parts;
+                gifLog(QStringLiteral("[parseTwitchGifs] entry=%1 parts=%2")
+                           .arg(entry)
+                           .arg(parts.join(',')));
                 if (parts.size() < 2)
                 {
                     continue;
@@ -269,8 +272,8 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
                 auto url = parts.size() >= 3 ? parts.at(2) : QString();
                 if (id.isEmpty())
                 {
-                    qCDebug(chatterinoTwitch)
-                        << "  Skipping empty ID, full tag value:" << gifsString;
+                    gifLog(QStringLiteral("[parseTwitchGifs] Empty ID, tag=%1")
+                               .arg(gifsString));
                     continue;
                 }
 
@@ -292,10 +295,12 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
                     }
                 }
 
-                qCDebug(chatterinoTwitch)
-                    << "  Parsed GIF - id:" << id << "url:" << url
-                    << "text:" << originalText << "range:" << startPos << "-"
-                    << endPos;
+                gifLog(QStringLiteral("[parseTwitchGifs] Parsed: id=%1 url=%2 "
+                                       "text='%3' range=%4-%5 contentLen=%6")
+                           .arg(id, url, originalText)
+                           .arg(startPos)
+                           .arg(endPos)
+                           .arg(content.length()));
                 gifs.push_back(TwitchGifOccurrence{
                     id, url, originalText, startPos, endPos});
             }
@@ -303,9 +308,8 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
     }
     else
     {
-        // Log all available tags for debugging
-        qCDebug(chatterinoTwitch)
-            << "No GIFs tag. Available tags:" << tags.keys();
+        gifLog(QStringLiteral("[parseTwitchGifs] No GIFs tag. Tags: %1")
+                   .arg(tags.keys().join(',')));
     }
 
     // Fallback: detect bracketed GIF pattern like [Title GIF by Source]
@@ -319,9 +323,11 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
             auto text = match.captured(1);
             auto bracketStart = static_cast<int>(match.capturedStart());
             auto bracketEnd = static_cast<int>(match.capturedEnd()) - 1;
-            qCDebug(chatterinoTwitch)
-                << "Fallback GIF pattern matched:" << text
-                << "at range:" << bracketStart << "-" << bracketEnd;
+            gifLog(QStringLiteral("[parseTwitchGifs] Fallback match: text='%1' "
+                                   "range=%2-%3")
+                       .arg(text)
+                       .arg(bracketStart)
+                       .arg(bracketEnd));
 
             // Search GIPHY API using the GIF title
             // Extract title: "Shock What GIF by ZenlessZoneZero" -> "Shock What"
@@ -335,22 +341,27 @@ std::vector<TwitchGifOccurrence> parseTwitchGifs(const QVariantMap &tags,
                 searchQuery = titleMatch.captured(1).trimmed();
             }
 
-            qCDebug(chatterinoTwitch)
-                << "Searching GIPHY for:" << searchQuery;
+            gifLog(QStringLiteral("[parseTwitchGifs] Searching GIPHY: '%1'")
+                       .arg(searchQuery));
             auto giphyId = searchGiphyForGif(searchQuery);
 
             if (!giphyId.isEmpty())
             {
-                qCDebug(chatterinoTwitch)
-                    << "GIPHY search succeeded, ID:" << giphyId;
+                gifLog(QStringLiteral("[parseTwitchGifs] GIPHY OK: %1")
+                           .arg(giphyId));
                 gifs.push_back(TwitchGifOccurrence{
                     giphyId, {}, text, bracketStart, bracketEnd});
             }
             else
             {
-                qCDebug(chatterinoTwitch)
-                    << "GIPHY search failed, bracketed text stays as-is";
+                gifLog(QStringLiteral("[parseTwitchGifs] GIPHY failed for '%1'")
+                           .arg(searchQuery));
             }
+        }
+        else
+        {
+            gifLog(QStringLiteral("[parseTwitchGifs] No fallback match. content='%1'")
+                       .arg(content.left(80)));
         }
     }
 
