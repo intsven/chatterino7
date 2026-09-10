@@ -553,16 +553,20 @@ QSizeF Image::size() const
     {
         auto pixmapSize = pixmap->size().toSizeF() * this->scale_;
 
-        // If expectedSize is set and the loaded image is larger than expected,
-        // use expectedSize for display. This handles Kick emotes which provide
-        // high-res images (up to 500x500) that should display at standard size.
+        // If expectedSize is set and the loaded image is larger in BOTH
+        // dimensions, scale down to expected size. This handles Kick emotes
+        // which provide high-res images (up to 500x500) that should display at
+        // standard size. Using && (not ||) preserves aspect ratio for wide or
+        // tall emotes (e.g. BTTV) where only one dimension exceeds expected.
         if (this->expectedSize_.isValid())
         {
             auto expectedSize = this->expectedSize_.toSizeF() * this->scale_;
-            if (pixmapSize.width() > expectedSize.width() ||
+            if (pixmapSize.width() > expectedSize.width() &&
                 pixmapSize.height() > expectedSize.height())
             {
-                return expectedSize;
+                auto scaleW = expectedSize.width() / pixmapSize.width();
+                auto scaleH = expectedSize.height() / pixmapSize.height();
+                return pixmapSize * std::min(scaleW, scaleH);
             }
         }
 
