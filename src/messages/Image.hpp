@@ -59,7 +59,8 @@ private:
     pajlada::Signals::Connection gifTimerConnection_;
 };
 
-QList<Frame> readFrames(QImageReader &reader, const Url &url);
+QList<Frame> readFrames(QImageReader &reader, const Url &url,
+                        int maxFrames = -1);
 void assignFrames(std::weak_ptr<Image> weak, QList<Frame> parsed);
 
 }  // namespace chatterino::detail
@@ -74,7 +75,7 @@ class Image : public std::enable_shared_from_this<Image>
 {
 public:
     // Maximum amount of RAM used by the image in bytes.
-    static constexpr int maxBytesRam = 20 * 1024 * 1024;
+    static constexpr int maxBytesRam = 100 * 1024 * 1024;
 
     ~Image();
 

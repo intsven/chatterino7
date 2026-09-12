@@ -205,12 +205,14 @@ std::optional<QPixmap> Frames::first() const
     return this->items_.front().image;
 }
 
-QList<Frame> readFrames(QImageReader &reader, const Url &url)
+QList<Frame> readFrames(QImageReader &reader, const Url &url, int maxFrames)
 {
     QList<Frame> frames;
-    frames.reserve(reader.imageCount());
+    int total = reader.imageCount();
+    int count = (maxFrames > 0) ? std::min(total, maxFrames) : total;
+    frames.reserve(count);
 
-    for (int index = 0; index < reader.imageCount(); ++index)
+    for (int index = 0; index < count; ++index)
     {
         auto pixmap = QPixmap::fromImageReader(&reader);
         if (!pixmap.isNull())
@@ -702,10 +704,33 @@ void Image::actuallyLoad()
                 }
             }
 
+            // Cap giphy frame count to the RAM budget (at least 1 frame).
+            // Long GIFs can exceed maxBytesRam even when downsampled
+            // (e.g. 300x200x89 frames ~= 21.4MB) — decode what fits instead
+            // of rejecting the image entirely.
+            int frameCount = reader.imageCount();
+            int framesToDecode = frameCount;
+            if (isGiphy && decodeSize.width() > 0 && decodeSize.height() > 0)
+            {
+                double bytesPerFrame = double(decodeSize.width()) *
+                                       double(decodeSize.height()) * 4.0;
+                int maxFrames = std::max(
+                    1, int(double(Image::maxBytesRam) / bytesPerFrame));
+                if (maxFrames < frameCount)
+                {
+                    framesToDecode = maxFrames;
+                    gifLog(QStringLiteral("[actuallyLoad] capping giphy frames "
+                                          "%1 -> %2 url=%3")
+                               .arg(frameCount)
+                               .arg(framesToDecode)
+                               .arg(shared->url().string));
+                }
+            }
+
             // use "double" to prevent int overflows
             double estBytes = double(decodeSize.width()) *
                               double(decodeSize.height()) *
-                              double(reader.imageCount()) * 4.0;
+                              double(framesToDecode) * 4.0;
             if (estBytes > double(Image::maxBytesRam))
             {
                 gifLog(QStringLiteral(
@@ -733,7 +758,8 @@ void Image::actuallyLoad()
                 << decodeSize.height() << "frames=" << reader.imageCount()
                 << "dataLen=" << result.getData().size();
 
-            auto parsed = detail::readFrames(reader, shared->url());
+            auto parsed =
+                detail::readFrames(reader, shared->url(), framesToDecode);
 
             gifLog(QStringLiteral("[actuallyLoad] readFrames returned %1 frames for %2")
                        .arg(parsed.size())

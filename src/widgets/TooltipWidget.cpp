@@ -7,6 +7,7 @@
 
 #include <QPainter>
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -55,6 +56,20 @@ TooltipEntry TooltipEntry::scaled(ImagePtr image, QString text, float scale)
 
         entry.customWidth = static_cast<int>(imgWidth * scale);
         entry.customHeight = static_cast<int>(imgHeight * scale);
+
+        // Cap the final tooltip size so large images (e.g. GIFs at
+        // natural size x tooltip scale) don't produce huge tooltips.
+        // Aspect ratio is preserved.
+        const int maxTooltipDim = 500;
+        if (entry.customWidth > maxTooltipDim ||
+            entry.customHeight > maxTooltipDim)
+        {
+            double s =
+                std::min(double(maxTooltipDim) / double(entry.customWidth),
+                         double(maxTooltipDim) / double(entry.customHeight));
+            entry.customWidth = std::max(1, int(entry.customWidth * s));
+            entry.customHeight = std::max(1, int(entry.customHeight * s));
+        }
     }
     return entry;
 }
