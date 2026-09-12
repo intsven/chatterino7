@@ -10,6 +10,7 @@
 #include "debug/AssertInGuiThread.hpp"
 #include "debug/Benchmark.hpp"
 #include "singletons/helper/GifTimer.hpp"
+#include "singletons/Settings.hpp"
 #include "singletons/WindowManager.hpp"
 #include "util/DebugCount.hpp"
 #include "util/GifDebugLog.hpp"
@@ -667,17 +668,56 @@ void Image::actuallyLoad()
                 return;
             }
 
-            // use "double" to prevent int overflows
-            if (double(size.width()) * double(size.height()) *
-                    double(reader.imageCount()) * 4.0 >
-                double(Image::maxBytesRam))
+            // For giphy GIFs, downsample at decode time to the display size
+            // (same maxGifHeight / 2x-width caps as TwitchGifElement).
+            // Full-res GIFs with many frames would otherwise exceed
+            // maxBytesRam (e.g. 480x480x68 frames ~= 63MB) and be rejected
+            // on all 3 URLs, leaving only fallback text.
+            QSize decodeSize = size;
+            if (isGiphy)
             {
-                gifLog(QStringLiteral("[actuallyLoad] image too large url=%1 "
-                       "%2x%3 frames=%4")
+                int maxH = getSettings()->maxGifHeight.getValue();
+                int maxW = maxH * 2;
+                double s = std::min(
+                    {1.0, double(maxW) / double(size.width()),
+                     double(maxH) / double(size.height())});
+                if (s < 1.0)
+                {
+                    decodeSize = QSize(std::max(1, int(size.width() * s)),
+                                       std::max(1, int(size.height() * s)));
+                    if (reader.supportsOption(QImageIOHandler::ScaledSize))
+                    {
+                        reader.setScaledSize(decodeSize);
+                        // size() reflects the scaled size when supported
+                        decodeSize = reader.size();
+                    }
+                    gifLog(QStringLiteral(
+                               "[actuallyLoad] downsampling giphy %1x%2 -> "
+                               "%3x%4 url=%5")
+                               .arg(size.width())
+                               .arg(size.height())
+                               .arg(decodeSize.width())
+                               .arg(decodeSize.height())
+                               .arg(shared->url().string));
+                }
+            }
+
+            // use "double" to prevent int overflows
+            double estBytes = double(decodeSize.width()) *
+                              double(decodeSize.height()) *
+                              double(reader.imageCount()) * 4.0;
+            if (estBytes > double(Image::maxBytesRam))
+            {
+                gifLog(QStringLiteral(
+                           "[actuallyLoad] image too large url=%1 %2x%3 "
+                           "frames=%4 estBytes=%5 limit=%6 dataLen=%7")
                            .arg(shared->url().string)
-                           .arg(size.width())
-                           .arg(size.height())
-                           .arg(reader.imageCount()));
+                           .arg(decodeSize.width())
+                           .arg(decodeSize.height())
+                           .arg(reader.imageCount())
+                           .arg(qint64(estBytes))
+                           .arg(Image::maxBytesRam)
+                           .arg(result.getData().size()));
                 qCDebug(chatterinoImage)
                     << "[GIF] image too large in RAM url=" << shared->url().string;
 
@@ -689,7 +729,9 @@ void Image::actuallyLoad()
             qCDebug(chatterinoImage)
                 << "[GIF] Decoding OK:" << shared->url().string
                 << size.width() << "x" << size.height()
-                << "frames=" << reader.imageCount();
+                << "decode=" << decodeSize.width() << "x"
+                << decodeSize.height() << "frames=" << reader.imageCount()
+                << "dataLen=" << result.getData().size();
 
             auto parsed = detail::readFrames(reader, shared->url());
 
